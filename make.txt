@@ -1,0 +1,7 @@
+DB_HOST=localhost DB_PORT=3306 DB_NAME=messenger_db DB_USER=openvoice DB_PASSWORD=openvoice123 mvn spring-boot:run
+
+
+
+
+run mysql in terminal:
+docker exec -it mysql-messenger mysql -u root -p
