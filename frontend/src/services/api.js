@@ -11,12 +11,50 @@ export function buildApi(baseUrl) {
       const response = await http.get('/groups');
       return response.data;
     },
-    async createGroup(name) {
-      const response = await http.post('/groups', { name });
-      return response.data;
-    },
     async getMessages(groupId) {
       const response = await http.get(`/messages/${groupId}`);
+      return response.data;
+    },
+    async adminLogin(username, password) {
+      const response = await http.post('/admin/login', { username, password });
+      return response.data;
+    },
+    async adminLogout(token) {
+      const response = await http.post(
+        '/admin/logout',
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      return response.data;
+    },
+    async adminCreateGroup(name, token) {
+      const response = await http.post(
+        '/admin/groups',
+        { name },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      return response.data;
+    },
+    async adminDeleteGroup(groupId, token) {
+      const response = await http.delete(`/admin/groups/${groupId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return response.data;
+    },
+    async adminSetGlobalBlock(alias, blocked, token) {
+      const response = await http.post(
+        '/admin/blocks/global',
+        { alias, blocked },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      return response.data;
+    },
+    async adminSetGroupBlock(groupId, alias, blocked, token) {
+      const response = await http.post(
+        '/admin/blocks/group',
+        { groupId, alias, blocked },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       return response.data;
     }
   };

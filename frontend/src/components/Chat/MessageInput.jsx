@@ -1,10 +1,13 @@
 import { useState } from 'react';
 
-function MessageInput({ onSend }) {
+function MessageInput({ onSend, disabled = false }) {
   const [value, setValue] = useState('');
 
   function submit(e) {
     e.preventDefault();
+    if (disabled) {
+      return;
+    }
     const trimmed = value.trim();
     if (!trimmed) {
       return;
@@ -18,9 +21,10 @@ function MessageInput({ onSend }) {
       <input
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder="Type message"
+        disabled={disabled}
+        placeholder="Send message"
       />
-      <button type="submit">Send</button>
+      <button type="submit" aria-label="Send message" disabled={disabled}>➤</button>
     </form>
   );
 }

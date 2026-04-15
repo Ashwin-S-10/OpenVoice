@@ -14,7 +14,11 @@ export function ChatProvider({ children }) {
   const [groups, setGroups] = useState([]);
   const [currentGroupId, setCurrentGroupId] = useState(null);
   const [messagesByGroup, setMessagesByGroup] = useState({});
+  const [messagesLoadingByGroup, setMessagesLoadingByGroup] = useState({});
   const [wsConnected, setWsConnected] = useState(false);
+  const [globallyBlocked, setGloballyBlocked] = useState(false);
+  const [groupBlockedMap, setGroupBlockedMap] = useState({});
+  const [accessNotice, setAccessNotice] = useState('');
 
   const socketRef = useRef(null);
 
@@ -44,9 +48,24 @@ export function ChatProvider({ children }) {
       },
       onClose: () => setWsConnected(false),
       onMessage: (message) => {
-        if (!message?.groupId) {
+        if (!message) {
           return;
         }
+
+        if (message.type === 'ERROR') {
+          setAccessNotice(message.message || 'Action not allowed');
+          return;
+        }
+
+        if (message.type === 'ADMIN_EVENT') {
+          handleAdminEvent(message);
+          return;
+        }
+
+        if (!message.groupId) {
+          return;
+        }
+
         setMessagesByGroup((prev) => ({
           ...prev,
           [message.groupId]: [...(prev[message.groupId] || []), message]
@@ -64,26 +83,17 @@ export function ChatProvider({ children }) {
 
   useEffect(() => {
     if (currentGroupId && socketRef.current?.isConnected()) {
-      socketRef.current.joinGroup(currentGroupId);
+      socketRef.current.joinGroup(currentGroupId, alias);
     }
-  }, [currentGroupId, wsConnected]);
+  }, [currentGroupId, wsConnected, alias]);
 
   async function loadGroups() {
     try {
       const data = await api.getGroups();
       setGroups(data);
-      if (!currentGroupId && data.length > 0) {
-        selectGroup(data[0].id);
-      }
     } catch (error) {
       console.error('Failed to load groups', error);
     }
-  }
-
-  async function createGroup(name) {
-    const group = await api.createGroup(name);
-    setGroups((prev) => [group, ...prev]);
-    await selectGroup(group.id);
   }
 
   async function selectGroup(groupId) {
@@ -96,13 +106,17 @@ export function ChatProvider({ children }) {
     }
 
     setCurrentGroupId(groupId);
+    setAccessNotice('');
 
     if (!messagesByGroup[groupId]) {
+      setMessagesLoadingByGroup((prev) => ({ ...prev, [groupId]: true }));
       try {
         const history = await api.getMessages(groupId);
         setMessagesByGroup((prev) => ({ ...prev, [groupId]: history }));
       } catch (error) {
         console.error('Failed to load messages', error);
+      } finally {
+        setMessagesLoadingByGroup((prev) => ({ ...prev, [groupId]: false }));
       }
     }
 
@@ -113,12 +127,86 @@ export function ChatProvider({ children }) {
       return;
     }
 
+    if (globallyBlocked || groupBlockedMap[currentGroupId]) {
+      setAccessNotice('You are blocked from sending messages in this group');
+      return;
+    }
+
     socketRef.current.sendMessage({
       groupId: currentGroupId,
       alias,
       content
     });
   }
+
+  function handleAdminEvent(eventMessage) {
+    const eventType = eventMessage.event;
+    const eventData = eventMessage.data || {};
+
+    if (eventType === 'GROUP_CREATED' && eventData.group) {
+      setGroups((prev) => {
+        if (prev.some((group) => group.id === eventData.group.id)) {
+          return prev;
+        }
+        return [eventData.group, ...prev];
+      });
+      return;
+    }
+
+    if (eventType === 'GROUP_DELETED') {
+      const deletedGroupId = Number(eventData.groupId);
+      setGroups((prev) => prev.filter((group) => group.id !== deletedGroupId));
+      setMessagesByGroup((prev) => {
+        const next = { ...prev };
+        delete next[deletedGroupId];
+        return next;
+      });
+      setMessagesLoadingByGroup((prev) => {
+        const next = { ...prev };
+        delete next[deletedGroupId];
+        return next;
+      });
+      setGroupBlockedMap((prev) => {
+        const next = { ...prev };
+        delete next[deletedGroupId];
+        return next;
+      });
+      if (currentGroupId === deletedGroupId) {
+        setCurrentGroupId(null);
+        setAccessNotice('This group was removed by admin');
+      }
+      return;
+    }
+
+    if (eventType === 'USER_BLOCK_UPDATED') {
+      const normalizedAlias = String(alias || '').trim().toLowerCase();
+      const targetAlias = String(eventData.alias || '').trim().toLowerCase();
+      if (!normalizedAlias || normalizedAlias !== targetAlias) {
+        return;
+      }
+
+      const isBlocked = Boolean(eventData.blocked);
+      if (eventData.scope === 'GLOBAL') {
+        setGloballyBlocked(isBlocked);
+        setAccessNotice(isBlocked ? 'You are blocked globally by admin' : 'Global block removed');
+      }
+
+      if (eventData.scope === 'GROUP') {
+        const blockedGroupId = Number(eventData.groupId);
+        setGroupBlockedMap((prev) => ({
+          ...prev,
+          [blockedGroupId]: isBlocked
+        }));
+        if (currentGroupId === blockedGroupId) {
+          setAccessNotice(isBlocked ? 'You are blocked in this group by admin' : 'Group block removed');
+        }
+      }
+    }
+  }
+
+  const isBlockedInCurrentGroup = currentGroupId
+    ? globallyBlocked || Boolean(groupBlockedMap[currentGroupId])
+    : globallyBlocked;
 
   const value = {
     alias,
@@ -128,11 +216,17 @@ export function ChatProvider({ children }) {
     wsConnected,
     groups,
     loadGroups,
-    createGroup,
     currentGroupId,
     selectGroup,
     messages: currentGroupId ? messagesByGroup[currentGroupId] || [] : [],
-    sendMessage
+    messagesLoading: currentGroupId ? Boolean(messagesLoadingByGroup[currentGroupId]) : false,
+    messageCountsByGroup: Object.fromEntries(
+      Object.entries(messagesByGroup).map(([groupId, groupMessages]) => [groupId, groupMessages.length])
+    ),
+    sendMessage,
+    isBlockedInCurrentGroup,
+    accessNotice,
+    clearAccessNotice: () => setAccessNotice('')
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

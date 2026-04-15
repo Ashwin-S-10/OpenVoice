@@ -26,4 +26,8 @@ public class GroupService {
         }
         return groupDao.create(trimmedName);
     }
+
+    public boolean deleteGroup(long groupId) {
+        return groupDao.deleteById(groupId);
+    }
 }

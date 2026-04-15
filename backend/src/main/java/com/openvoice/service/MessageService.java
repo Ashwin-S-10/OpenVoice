@@ -80,4 +80,9 @@ public class MessageService {
         String alias = incomingAlias == null ? "" : incomingAlias.trim();
         return alias.isEmpty() ? aliasService.generateAlias() : alias;
     }
+
+    public void clearGroupCache(long groupId) {
+        recentMessages.remove(groupId);
+        initializedGroups.remove(groupId);
+    }
 }

@@ -24,9 +24,9 @@ export function createChatSocket(url, handlers) {
   };
 
   return {
-    joinGroup(groupId) {
+    joinGroup(groupId, alias) {
       if (socket.readyState === WebSocket.OPEN) {
-        send(socket, { type: 'JOIN_GROUP', groupId });
+        send(socket, { type: 'JOIN_GROUP', groupId, alias });
       }
     },
     leaveGroup(groupId) {

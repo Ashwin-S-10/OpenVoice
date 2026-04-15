@@ -58,4 +58,9 @@ public class GroupDao {
         group.setCreatedAt(now);
         return group;
     }
+
+    public boolean deleteById(long groupId) {
+        int deleted = jdbcTemplate.update("DELETE FROM chat_groups WHERE id = ?", groupId);
+        return deleted > 0;
+    }
 }
